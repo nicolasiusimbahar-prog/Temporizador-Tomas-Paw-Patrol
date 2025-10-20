@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Temporizador de Tomás – Paw Patrol</title>
+  <meta name="theme-color" content="#1e3a8a">
+  <style>
+    :root {
+      --bg: #e3f2fd;
+      --card: #ffffff;
+      --text: #0f172a;
+      --accent: #1e3a8a;
+      --secondary: #f43f5e;
+      --success: #22c55e;
+      --warn: #eab308;
+      --danger: #ef4444;
+    }
+    body {
+      font-family: "Poppins", Arial, sans-serif;
+      background: var(--bg) /* Considera reemplazar la URL por una local o con licencia adecuada */;
+      color: var(--text);
+      margin: 0; padding: 0;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh;
+    }
+    .app {
+      background: var(--card);
+      padding: 24px;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      width: 95%;
+      max-width: 600px;
+      text-align: center;
+      border: 4px solid var(--accent);
+    }
+    h1 { font-size: 26px; color: var(--accent); margin-bottom: 8px; }
+    h2 { color: var(--secondary); margin-top: 0; font-size: 18px; }
+    .big-timer {
+      font-size: 64px;
+      font-weight: bold;
+      margin: 20px 0;
+      color: var(--accent);
+      text-shadow: 2px 2px rgba(234,179,8,0.18);
+    }
+    .progress-wrap {
+      height: 28px;
+      background: #ddd;
+      border-radius: 16px;
+      overflow: hidden;
+      margin-top: 16px;
+    }
+    .progress {
+      height: 100%;
+      width: 0%;
+      background: var(--success);
+      transition: width 0.2s linear, background 0.2s linear;
+    }
+    .controls { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button[disabled] { opacity: 0.5; cursor: not-allowed; }
+    button:hover:not([disabled]) { background: var(--secondary); }
+    input[type=number] {
+      width: 80px;
+      padding: 6px;
+      border-radius: 8px;
+      border: 2px solid var(--accent);
+      text-align: center;
+      font-size: 16px;
+      -moz-appearance: textfield;
+    }
+    .small { font-size: 14px; color: #334155; margin-top: 6px; }
+    footer { margin-top: 20px; font-size: 12px; color: #64748b; }
+    @media (max-width:520px){
+      .big-timer{ font-size:48px; }
+      .app{ padding:16px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app" role="main" aria-label="Temporizador visual para Tomás">
+    <h1>🐾 Temporizador de Tomás 🐾</h1>
+    <h2>Con ayuda de la Patrulla Canina</h2>
+
+    <!-- display con aria-live para lectores de pantalla -->
+    <div class="big-timer" id="display" aria-live="polite" aria-atomic="true">10:00</div>
+
+    <div>
+      <label for="minutes">Min:</label>
+      <input id="minutes" type="number" min="0" max="240" value="10" inputmode="numeric" />
+      <label for="seconds">Seg:</label>
+      <input id="seconds" type="number" min="0" max="59" value="0" inputmode="numeric" />
+      <button id="setBtn" aria-controls="display">Fijar</button>
+    </div>
+
+    <div class="controls">
+      <button id="startBtn">Iniciar</button>
+      <button id="pauseBtn" disabled>Pausar</button>
+      <button id="resetBtn">Reiniciar</button>
+    </div>
+
+    <!-- barra de progreso accesible -->
+    <div class="progress-wrap" aria-hidden="false">
+      <div id="progress" class="progress"
+           role="progressbar"
+           aria-valuemin="0"
+           aria-valuemax="100"
+           aria-valuenow="0"></div>
+    </div>
+
+    <div class="small">Colores: Verde = mucho tiempo • Amarillo = poco • Rojo = casi terminado</div>
+
+    <footer>Diseñado para Tomás – Paw Patrol © 2025</footer>
+  </main>
+
+<script>
+(function(){
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const setBtn = document.getElementById('setBtn');
+  const minutesInput = document.getElementById('minutes');
+  const secondsInput = document.getElementById('seconds');
+  const display = document.getElementById('display');
+  const progress = document.getElementById('progress');
+
+  // valores por defecto
+  const DEFAULT_SECONDS = 10 * 60;
+  let totalSeconds = DEFAULT_SECONDS;
+  let remaining = totalSeconds;
+  let interval = null;
+  let running = false;
+
+  // restaurar estado desde localStorage si existe
+  try {
+    const saved = JSON.parse(localStorage.getItem('temporizador-tomas') || 'null');
+    if (saved && typeof saved.totalSeconds === 'number') {
+      totalSeconds = Math.max(1, saved.totalSeconds);
+      remaining = Math.min(totalSeconds, Math.max(0, saved.remaining ?? totalSeconds));
+      running = !!saved.running;
+    }
+  } catch(e){ /* ignore */ }
+
+  function pad(n){ return n.toString().padStart(2,'0'); }
+
+  function renderTime(s){
+    const mm = Math.floor(s/60);
+    const ss = s%60;
+    display.textContent = pad(mm)+":"+pad(ss);
+  }
+
+  function updateProgress(){
+    const safeTotal = Math.max(1, totalSeconds);
+    const completed = safeTotal - remaining;
+    const pct = Math.max(0, Math.min(100, Math.round((completed / safeTotal) * 100)));
+    progress.style.width = pct + '%';
+    progress.setAttribute('aria-valuenow', String(pct));
+
+    // colores por porcentaje: >=80% rojo, >=50% amarillo, sino verde
+    progress.classList.remove('warn','danger');
+    if (pct >= 80) {
+      progress.classList.add('danger');
+      progress.style.background = getComputedStyle(document.documentElement).getPropertyValue('--danger');
+    } else if (pct >= 50) {
+      progress.classList.add('warn');
+      progress.style.background = getComputedStyle(document.documentElement).getPropertyValue('--warn');
+    } else {
+      progress.style.background = getComputedStyle(document.documentElement).getPropertyValue('--success');
+    }
+  }
+
+  function saveState(){
+    try {
+      localStorage.setItem('temporizador-tomas', JSON.stringify({
+        totalSeconds, remaining, running
+      }));
+    } catch(e){ /* ignore storage errors */ }
+  }
+
+  // reproducir sonido simple usando WebAudio (no archivos externos)
+  function playBeep(){
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = 880;
+      o.connect(g);
+      g.connect(ctx.destination);
+      g.gain.value = 0.001;
+      o.start();
+      // rampa de volumen
+      g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.7);
+      o.stop(ctx.currentTime + 0.8);
+    } catch(e){ /* seguridad/navegador */ }
+  }
+
+  function tick(){
+    if (remaining > 0){
+      remaining--;
+      renderTime(remaining);
+      updateProgress();
+      saveState();
+    } else {
+      clearInterval(interval);
+      interval = null;
+      running = false;
+      updateControls();
+      playBeep();
+      // vibrar si el dispositivo lo permite
+      if (navigator.vibrate) navigator.vibrate([200,100,200]);
+      alert("¡Tiempo terminado, Tomás! 🐾 ¡Buen trabajo!");
+      saveState();
+    }
+  }
+
+  function startTimer(){
+    if (running) return;
+    if (remaining <= 0) remaining = totalSeconds;
+    interval = setInterval(tick, 1000);
+    running = true;
+    updateControls();
+    saveState();
+  }
+  function pauseTimer(){
+    if (interval) clearInterval(interval);
+    interval = null;
+    running = false;
+    updateControls();
+    saveState();
+  }
+  function resetTimer(){
+    if (interval) clearInterval(interval);
+    interval = null;
+    remaining = totalSeconds;
+    running = false;
+    renderTime(remaining);
+    updateProgress();
+    updateControls();
+    saveState();
+  }
+
+  function updateControls(){
+    startBtn.disabled = running;
+    pauseBtn.disabled = !running;
+  }
+
+  // eventos
+  startBtn.onclick = startTimer;
+  pauseBtn.onclick = pauseTimer;
+  resetBtn.onclick = ()=>{
+    // confirmar reinicio si ya está en marcha y no quieres perder progreso
+    if (running && !confirm('¿Reiniciar el temporizador?')) return;
+    resetTimer();
+  };
+
+  setBtn.onclick = ()=>{
+    const m = Math.max(0, Math.min(240, Number(minutesInput.value) || 0));
+    const s = Math.max(0, Math.min(59, Number(secondsInput.value) || 0));
+    const newTotal = m*60 + s;
+    totalSeconds = newTotal > 0 ? newTotal : DEFAULT_SECONDS;
+    remaining = totalSeconds;
+    renderTime(remaining);
+    updateProgress();
+    saveState();
+  };
+
+  // permitir Enter en inputs para fijar rápidamente
+  [minutesInput, secondsInput].forEach(inp => {
+    inp.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        setBtn.click();
+      }
+    });
+  });
+
+  // inicializar UI
+  renderTime(remaining);
+  updateProgress();
+  updateControls();
+
+  // si estaba corriendo al cargar, reiniciar intervalo
+  if (running) {
+    // asegurar no comenzar si remaining ya llegó a 0
+    if (remaining > 0) {
+      interval = setInterval(tick, 1000);
+    } else {
+      running = false;
+      updateControls();
+    }
+  }
+})();
+</script>
+</body>
+</html>
